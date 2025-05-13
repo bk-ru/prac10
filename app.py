@@ -15,7 +15,7 @@ st.set_page_config(
 
 # URL бэкенда на render.com
 # Замените на свой URL после развертывания на render.com
-BACKEND_URL = "https://excel-to-markdown-api.onrender.com"
+BACKEND_URL = "https://prac10-yfgm.onrender.com"
 
 # Функции для взаимодействия с бэкендом
 def check_api_status():
