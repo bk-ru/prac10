@@ -4,98 +4,134 @@ import requests
 from io import BytesIO
 from urllib.parse import urljoin
 
-st.set_page_config(page_title="🛰️ Системы координат", layout="centered")
+# Настройка стилей
+st.set_page_config(
+    page_title="📡 Трансформатор координат", 
+    layout="wide",
+    page_icon="🌐"
+)
 
-API_ENDPOINT = "https://prac10-i54v.onrender.com"
+# Кастомный CSS
+st.markdown("""
+<style>
+    .header-style { color: #2E86C1; font-family: 'Arial'; }
+    .stButton>button { background: #1ABC9C; color: white; border-radius: 8px; }
+    .stSelectbox>div>div>div { border: 2px solid #3498DB; }
+    .stFileUploader>section>div { border: 2px dashed #28B463; }
+    .report-output { background: #F9E79F; padding: 15px; border-radius: 10px; }
+</style>
+""", unsafe_allow_html=True)
 
-SYSTEM_OPTIONS = [
-    "СК-95", "ПЗ-90.11", "WGS-84 (G1150)",
-    "СК-42", "ITRF-2008", "ПЗ-90", 
-    "ГСК-2011", "ПЗ-90.02"
-]
+API_SERVICE = "https://prac10-i54v.onrender.com"
 
-def api_available():
-    try:
-        return requests.head(API_ENDPOINT, timeout=7).status_code == 200
-    except:
-        return False
+COORDINATE_SYSTEMS = {
+    "СК-42": "russian42",
+    "ПЗ-90.11": "pz9011",
+    "WGS84_G1150": "wgs84",
+    "ГСК-2011": "gsk2011",
+    "ITRF-2008": "itrf08",
+    "СК-95": "russian95",
+    "ПЗ-90": "pz90",
+    "ПЗ-90.02": "pz9002"
+}
 
-def process_coordinates(data_file, from_system, to_system):
-    service_url = urljoin(API_ENDPOINT, "/transform/")
-    upload = {"data_file": (data_file.name, data_file.getvalue(), data_file.type)}
-    params = {"from": from_system, "to": to_system}
-    
-    try:
-        result = requests.post(service_url, files=upload, data=params)
-        return BytesIO(result.content) if result.ok else None
-    except:
-        st.error("Сервис временно недоступен")
-        return None
-
-def create_md_report(data_file, from_system, to_system):
-    report_url = urljoin(API_ENDPOINT, "/analysis/")
-    upload = {"data_file": (data_file.name, data_file.getvalue(), data_file.type)}
-    params = {"from": from_system, "to": to_system}
-    
-    try:
-        response = requests.post(report_url, files=upload, data=params)
-        return BytesIO(response.content) if response.ok else None
-    except:
-        st.error("Ошибка генерации отчёта")
-        return None
-
-def app_interface():
-    st.header("Преобразование пространственных координат")
-    st.caption("Загрузите табличный файл для конвертации значений")
-    
-    # if not api_available():
-    #     st.warning("Сервис обработки недоступен")
-    #     return
-
-    data_input = st.file_uploader("Исходные данные", ["csv", "xls", "xlsx"])
-    
-    if data_input:
-        try:
-            df = pd.read_csv(data_input) if data_input.type == "text/csv" else pd.read_excel(data_input)
-            
-            if {"X", "Y", "Z", "Name"}.issubset(df.columns):
-                st.subheader("Первые записи")
-                st.write(df.sample(min(3, len(df))))
-                
-                data_input.seek(0)
-                
-                left, right = st.columns(2)
-                with left:
-                    src = st.selectbox("Исходная СК", SYSTEM_OPTIONS, index=3)
-                with right:
-                    dst = st.selectbox("Целевая СК", SYSTEM_OPTIONS, index=5)
-                
-                if st.button("Выполнить преобразование"):
-                    with st.status("Обработка..."):
-                        output = process_coordinates(data_input, src, dst)
-                        if output:
-                            st.download_button(
-                                "Экспорт результатов",
-                                output,
-                                "converted_data.csv",
-                                "text/csv"
-                            )
-                
-                if st.button("Создать аналитику"):
-                    with st.spinner("Подготовка отчёта..."):
-                        md_report = create_md_report(data_input, src, dst)
-                        if md_report:
-                            st.download_button(
-                                "Скачать отчёт",
-                                md_report,
-                                "coord_report.md",
-                                "text/markdown"
-                            )
-            else:
-                st.error("Неверная структура данных: требуются колонки Name, X, Y, Z")
+def display_guide():
+    with st.expander("📘 Инструкция по использованию"):
+        st.markdown("""
+        1. Загрузите файл в формате CSV/XLSX
+        2. Проверьте предпросмотр данных
+        3. Выберите системы координат
+        4. Нажмите соответствующую кнопку преобразования
+        5. Скачайте результат
         
-        except Exception as error:
-            st.error(f"Ошибка обработки файла: {str(error)}")
+        **Требования к данным:**
+        - Обязательные колонки: Name, X, Y, Z
+        - Поддерживаемые форматы: .csv, .xlsx
+        """)
+
+def transform_data(file_obj, src_sys, tgt_sys):
+    endpoint = urljoin(API_SERVICE, "/api/v1/transform")
+    headers = {"X-API-Key": "coord_transform"}
+    
+    try:
+        response = requests.post(
+            endpoint,
+            files={"dataset": file_obj},
+            data={"source": src_sys, "target": tgt_sys},
+            headers=headers,
+            timeout=15
+        )
+        return BytesIO(response.content) if response.ok else None
+    except Exception as e:
+        st.toast(f"Ошибка: {str(e)}", icon="⚠️")
+        return None
+
+def main_interface():
+    st.markdown("<h1 class='header-style'>📡 Трансформатор геопространственных данных</h1>", unsafe_allow_html=True)
+    
+    display_guide()
+    
+    with st.container(border=True):
+        uploaded_file = st.file_uploader(
+            "Перетащите файл с координатами", 
+            type=["csv", "xlsx"],
+            help="Поддерживаются CSV и Excel файлы с координатами"
+        )
+
+    if uploaded_file:
+        try:
+            df = pd.read_csv(uploaded_file) if uploaded_file.type == "text/csv" else pd.read_excel(uploaded_file)
+            
+            if not {"Name", "X", "Y", "Z"}.issubset(df.columns):
+                st.error("❌ Неверная структура файла!")
+                return
+
+            with st.container():
+                col1, col2 = st.columns([2, 3])
+                with col1:
+                    st.subheader("Параметры преобразования")
+                    src_sys = st.selectbox(
+                        "Исходная система", 
+                        options=list(COORDINATE_SYSTEMS.keys()),
+                        index=3
+                    )
+                    tgt_sys = st.selectbox(
+                        "Целевая система", 
+                        options=list(COORDINATE_SYSTEMS.keys()),
+                        index=5
+                    )
+                    
+                    c1, c2 = st.columns(2)
+                    with c1:
+                        if st.button("🔄 Конвертировать", use_container_width=True):
+                            with st.spinner("Трансформация координат..."):
+                                result = transform_data(uploaded_file, src_sys, tgt_sys)
+                                if result:
+                                    st.session_state.converted_data = result
+                    with c2:
+                        if st.button("📊 Создать отчет", type="secondary", use_container_width=True):
+                            pass
+
+                with col2:
+                    st.subheader("Структура данных")
+                    st.dataframe(
+                        df.head(5).style.highlight_max(color="#F8C471").format(precision=3),
+                        use_container_width=True
+                    )
+
+            if "converted_data" in st.session_state:
+                st.divider()
+                st.success("✅ Преобразование завершено!")
+                st.download_button(
+                    label="💾 Скачать результат",
+                    data=st.session_state.converted_data,
+                    file_name="transformed_coordinates.csv",
+                    mime="text/csv",
+                    type="primary"
+                )
+
+        except Exception as e:
+            st.error(f"Критическая ошибка: {str(e)}")
 
 if __name__ == "__main__":
-    app_interface()
+    main_interface()
