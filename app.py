@@ -49,21 +49,19 @@ def display_guide():
         - Поддерживаемые форматы: .csv, .xlsx
         """)
 
-def transform_data(file_obj, src_sys, tgt_sys):
-    endpoint = urljoin(API_SERVICE, "/convert-coordinates/")
-    headers = {"X-API-Key": "coord_transform"}
-    
+def transform_data(file, source_system, target_system):
+    url = urljoin(API_SERVICE, "/convert-coordinates/")
+    files = {"file": (file.name, file.getvalue(), file.type)}
+    data = {"source_system": source_system, "target_system": target_system}
     try:
-        response = requests.post(
-            endpoint,
-            files={"dataset": file_obj},
-            data={"source": src_sys, "target": tgt_sys},
-            headers=headers,
-            timeout=15
-        )
-        return BytesIO(response.content) if response.ok else None
+        response = requests.post(url, files=files, data=data)
+        if response.status_code == 200:
+            return BytesIO(response.content)
+        else:
+            st.error(f"Ошибка: {response.text}")
+            return None
     except Exception as e:
-        st.toast(f"Ошибка: {str(e)}", icon="⚠️")
+        st.error(f"Ошибка связи с API: {str(e)}")
         return None
 
 def generate_markdown_report(file, source_system, target_system):
