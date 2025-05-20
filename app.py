@@ -3,6 +3,7 @@ import pandas as pd
 import requests
 from io import BytesIO
 from urllib.parse import urljoin
+import time
 
 # Настройки страницы
 st.set_page_config(
@@ -31,9 +32,11 @@ COORDINATE_SYSTEMS = {
 def verify_api_connection():
     """Проверяет доступность API сервера"""
     try:
-        response = requests.get(API_ENDPOINT, timeout=5)
-        return response.ok
-    except requests.exceptions.RequestException:
+        # Проверяем доступность API с таймаутом 3 секунды
+        response = requests.get(API_ENDPOINT, timeout=3)
+        return response.status_code == 200
+    except requests.exceptions.RequestException as e:
+        st.warning(f"Ошибка подключения: {str(e)}")
         return False
 
 def process_coordinate_conversion(file_obj, src_system, dst_system):
@@ -43,12 +46,18 @@ def process_coordinate_conversion(file_obj, src_system, dst_system):
     params = {"source_system": src_system, "target_system": dst_system}
     
     try:
-        api_response = requests.post(api_url, files=file_data, data=params)
+        with st.spinner("Идет преобразование координат..."):
+            api_response = requests.post(api_url, files=file_data, data=params, timeout=10)
+        
         if api_response.status_code == 200:
             return BytesIO(api_response.content)
-        st.warning(f"Сервер вернул ошибку: {api_response.text}")
+        else:
+            st.error(f"Ошибка сервера: {api_response.text}")
+    except requests.exceptions.Timeout:
+        st.error("Превышено время ожидания ответа от сервера")
     except Exception as api_error:
-        st.error(f"Проблемы с соединением: {api_error}")
+        st.error(f"Ошибка при обработке запроса: {str(api_error)}")
+    
     return None
 
 def create_markdown_document(file_obj, src_system, dst_system):
@@ -58,12 +67,18 @@ def create_markdown_document(file_obj, src_system, dst_system):
     params = {"source_system": src_system, "target_system": dst_system}
     
     try:
-        response = requests.post(report_url, files=file_data, data=params)
+        with st.spinner("Формирование отчета..."):
+            response = requests.post(report_url, files=file_data, data=params, timeout=10)
+        
         if response.status_code == 200:
             return BytesIO(response.content)
-        st.warning(f"Ошибка генерации отчёта: {response.text}")
+        else:
+            st.error(f"Ошибка генерации отчета: {response.text}")
+    except requests.exceptions.Timeout:
+        st.error("Превышено время ожидания при создании отчета")
     except Exception as report_error:
-        st.error(f"Ошибка при создании отчёта: {report_error}")
+        st.error(f"Ошибка при создании отчета: {str(report_error)}")
+    
     return None
 
 def display_file_preview(uploaded_file):
@@ -76,7 +91,7 @@ def display_file_preview(uploaded_file):
         
         required_fields = ["Name", "X", "Y", "Z"]
         if not all(field in data.columns for field in required_fields):
-            st.error(f"Необходимые колонки: {', '.join(required_fields)}")
+            st.error(f"Файл должен содержать следующие колонки: {', '.join(required_fields)}")
             return False
             
         st.subheader("Предпросмотр данных")
@@ -84,7 +99,7 @@ def display_file_preview(uploaded_file):
         return True
         
     except Exception as parse_error:
-        st.error(f"Ошибка чтения файла: {parse_error}")
+        st.error(f"Ошибка чтения файла: {str(parse_error)}")
         return False
 
 def main_interface():
@@ -92,10 +107,12 @@ def main_interface():
     st.header("🌍 Конвертер систем координат")
     st.caption("Загрузите файл с координатами для преобразования между системами")
     
-    # Проверка подключения к API
-    if not verify_api_connection():
-        st.warning("Сервис временно недоступен. Попробуйте позже.")
-        return
+    # Добавляем кнопку для проверки подключения
+    if st.button("🔌 Проверить подключение к API"):
+        if verify_api_connection():
+            st.success("API доступен!")
+        else:
+            st.error("Не удалось подключиться к API")
     
     # Загрузка файла
     input_file = st.file_uploader(
@@ -124,11 +141,13 @@ def main_interface():
         )
     
     # Кнопки действий
-    if st.button("🔄 Конвертировать", type="primary"):
-        with st.spinner("Идёт преобразование..."):
+    convert_col, report_col = st.columns(2)
+    
+    with convert_col:
+        if st.button("🔄 Конвертировать", type="primary"):
             result = process_coordinate_conversion(input_file, source_crs, target_crs)
             if result:
-                st.success("Готово!")
+                st.success("Преобразование выполнено успешно!")
                 st.download_button(
                     "💾 Сохранить результат",
                     data=result,
@@ -136,13 +155,13 @@ def main_interface():
                     mime="text/csv"
                 )
     
-    if st.button("📊 Создать отчёт"):
-        with st.spinner("Формирование документа..."):
+    with report_col:
+        if st.button("📊 Создать отчет"):
             report = create_markdown_document(input_file, source_crs, target_crs)
             if report:
-                st.success("Отчёт подготовлен!")
+                st.success("Отчет успешно сформирован!")
                 st.download_button(
-                    "📥 Загрузить отчёт",
+                    "📥 Загрузить отчет",
                     data=report,
                     file_name="coordinate_report.md",
                     mime="text/markdown"
