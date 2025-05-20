@@ -15,7 +15,7 @@ st.set_page_config(
 )
 
 # Конфигурация API
-API_ENDPOINT = "https://prac10-fi54v.onrender.com"
+API_ENDPOINT = "https://jjjj-i54v.onrender.com"
 
 # Доступные системы координат
 COORDINATE_SYSTEMS = {
