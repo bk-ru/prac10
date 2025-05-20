@@ -50,7 +50,7 @@ def display_guide():
         """)
 
 def transform_data(file_obj, src_sys, tgt_sys):
-    endpoint = urljoin(API_SERVICE, "/api/v1/transform")
+    endpoint = urljoin(API_SERVICE, "/convert-coordinates/")
     headers = {"X-API-Key": "coord_transform"}
     
     try:
@@ -64,6 +64,21 @@ def transform_data(file_obj, src_sys, tgt_sys):
         return BytesIO(response.content) if response.ok else None
     except Exception as e:
         st.toast(f"Ошибка: {str(e)}", icon="⚠️")
+        return None
+
+def generate_markdown_report(file, source_system, target_system):
+    url = urljoin(API_SERVICE, "/generate-report/")
+    files = {"file": (file.name, file.getvalue(), file.type)}
+    data = {"source_system": source_system, "target_system": target_system}
+    try:
+        response = requests.post(url, files=files, data=data)
+        if response.status_code == 200:
+            return BytesIO(response.content)
+        else:
+            st.error(f"Ошибка: {response.text}")
+            return None
+    except Exception as e:
+        st.error(f"Ошибка связи с API: {str(e)}")
         return None
 
 def main_interface():
@@ -110,7 +125,15 @@ def main_interface():
                                     st.session_state.converted_data = result
                     with c2:
                         if st.button("📊 Создать отчет", type="secondary", use_container_width=True):
-                            pass
+                            with st.spinner("Формирование отчёта..."):
+                                report_data = generate_markdown_report(uploaded_file, src_sys, tgt_sys)
+                            if report_data:
+                                st.download_button(
+                                    label="⬇️ Скачать Markdown-отчет",
+                                    data=report_data,
+                                    file_name="report.md",
+                                    mime="text/markdown"
+                                )
 
                 with col2:
                     st.subheader("Структура данных")
