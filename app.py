@@ -108,7 +108,7 @@ from urllib.parse import urljoin
 
 st.set_page_config(page_title="🌍 Конвертер координат", layout="wide")
 
-BACKEND_URL = "https://prac10-cjvb.onrender.com"
+BACKEND_URL = "https://prac10-i54v.onrender.com"
 
 COORD_SYSTEMS = [
     "СК-42", "СК-95", "ПЗ-90", "ПЗ-90.02", "ПЗ-90.11",
